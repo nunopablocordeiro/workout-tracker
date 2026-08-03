@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daily Reps</title>
+<style>
+  :root {
+    --stone-50: #fafaf9;
+    --stone-100: #f5f5f4;
+    --stone-200: #e7e5e4;
+    --stone-300: #d6d3d1;
+    --stone-400: #a8a29e;
+    --stone-500: #78716c;
+    --stone-700: #44403c;
+    --stone-800: #292524;
+    --pushups: #e0654d;
+    --situps: #4d8fe0;
+    --squats: #4dbf7a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--stone-50);
+    color: var(--stone-800);
+  }
+  .wrap { max-width: 420px; margin: 0 auto; padding: 20px; }
+  .header-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  h1 { font-size: 24px; font-weight: 700; margin: 0; }
+  .streak { font-size: 14px; font-weight: 600; color: #ea580c; }
+  .subrow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .date { color: var(--stone-400); font-size: 14px; }
+  .saved-tag { font-size: 11px; color: var(--stone-300); }
+
+  .rest-btn {
+    width: 100%; padding: 12px; border-radius: 16px; font-weight: 500; font-size: 14px;
+    border: 1px solid var(--stone-200); background: white; color: var(--stone-400);
+    margin-bottom: 16px; cursor: pointer;
+  }
+  .rest-btn.active { background: var(--stone-700); color: white; border-color: var(--stone-700); }
+
+  .rest-card {
+    background: white; border-radius: 16px; padding: 24px; text-align: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04); border: 1px solid var(--stone-100); margin-bottom: 32px;
+  }
+  .rest-card p { color: var(--stone-500); font-size: 14px; margin: 0; }
+
+  .cards { display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
+  .card {
+    background: white; border-radius: 16px; padding: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04); border: 1px solid var(--stone-100);
+  }
+  .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .card-title { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--stone-700); }
+  .card-count { font-size: 14px; font-weight: 500; color: var(--stone-400); }
+  .card-count.done { color: var(--exercise-color); }
+
+  .bar-bg { width: 100%; height: 8px; background: var(--stone-100); border-radius: 999px; overflow: hidden; margin-bottom: 12px; }
+  .bar-fill { height: 100%; border-radius: 999px; transition: width 0.3s; }
+
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row button {
+    flex: 1; padding: 8px 0; border-radius: 8px; border: none; font-weight: 500; font-size: 14px; cursor: pointer;
+  }
+  .btn-row button:active { transform: scale(0.95); }
+  .btn-minus { background: var(--stone-100); color: var(--stone-500); }
+  .btn-plus { color: white; }
+
+  .section-card {
+    background: white; border-radius: 16px; padding: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04); border: 1px solid var(--stone-100); margin-bottom: 24px;
+  }
+  .section-title { font-weight: 600; color: var(--stone-700); font-size: 14px; margin: 0 0 12px 0; }
+
+  .week-row { display: flex; justify-content: space-between; }
+  .day-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .day-label { font-size: 12px; color: var(--stone-400); }
+  .day-dot {
+    width: 32px; height: 32px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 500; background: var(--stone-100); color: var(--stone-500);
+  }
+  .day-dot.today { box-shadow: 0 0 0 2px var(--stone-300); }
+
+  .targets-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .edit-link { background: none; border: none; color: var(--stone-400); font-size: 12px; font-weight: 500; cursor: pointer; }
+  .targets-display { display: flex; gap: 16px; font-size: 14px; color: var(--stone-500); }
+  .targets-display b { color: var(--stone-700); font-weight: 500; }
+
+  .target-edit-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: var(--stone-600); }
+  .target-edit-row input {
+    width: 64px; text-align: right; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--stone-200); font-size: 14px;
+  }
+  .target-btn-row { display: flex; gap: 8px; padding-top: 4px; }
+  .target-btn-row button { flex: 1; padding: 8px 0; border-radius: 8px; border: none; font-weight: 500; font-size: 14px; cursor: pointer; }
+  .btn-cancel { background: var(--stone-100); color: var(--stone-500); }
+  .btn-save { background: var(--stone-800); color: white; }
+
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .cal-nav-btn { background: var(--stone-100); border: none; width: 28px; height: 28px; border-radius: 8px; font-size: 16px; color: var(--stone-600); cursor: pointer; }
+  .cal-month-label { font-size: 13px; font-weight: 600; color: var(--stone-700); }
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 4px; }
+  .cal-weekdays span { text-align: center; font-size: 10px; color: var(--stone-400); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .cal-cell {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; border-radius: 8px; cursor: pointer; border: none; background: var(--stone-50); color: var(--stone-600);
+  }
+  .cal-cell.empty { visibility: hidden; cursor: default; }
+  .cal-cell.today { box-shadow: 0 0 0 2px var(--stone-300); }
+  .cal-cell.selected { box-shadow: 0 0 0 2px var(--stone-700); }
+  .cal-cell.future { color: var(--stone-300); cursor: default; }
+  .cal-detail {
+    margin-top: 14px; padding: 12px; border-radius: 12px; background: var(--stone-50); border: 1px solid var(--stone-100);
+  }
+  .cal-detail h4 { margin: 0 0 8px 0; font-size: 13px; color: var(--stone-700); }
+  .cal-detail-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--stone-600); padding: 3px 0; }
+  .cal-detail-rest { font-size: 13px; color: #4338ca; font-weight: 500; }
+  .cal-detail-empty { font-size: 13px; color: var(--stone-400); }
+
+  footer { text-align: center; font-size: 11px; color: var(--stone-300); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header-row">
+    <h1>Daily Reps</h1>
+    <span class="streak" id="streakTag" style="display:none;"></span>
+  </div>
+  <div class="subrow">
+    <span class="date" id="dateLabel"></span>
+    <span class="saved-tag">Saved locally</span>
+  </div>
+
+  <button class="rest-btn" id="restBtn">🌙 Mark today as a rest day</button>
+
+  <div id="restCard" class="rest-card" style="display:none;">
+    <p>Enjoy the recovery — today counts toward your streak automatically.</p>
+  </div>
+
+  <div class="cards" id="cardsWrap"></div>
+
+  <div class="section-card">
+    <p class="section-title">Last 7 days</p>
+    <div class="week-row" id="weekRow"></div>
+  </div>
+
+  <div class="section-card">
+    <div class="targets-header">
+      <p class="section-title" style="margin:0;">History</p>
+      <button class="edit-link" id="toggleCalendarBtn">Show</button>
+    </div>
+    <div id="calendarWrap" style="display:none;">
+      <div class="cal-nav">
+        <button id="calPrevBtn" class="cal-nav-btn">‹</button>
+        <span id="calMonthLabel" class="cal-month-label"></span>
+        <button id="calNextBtn" class="cal-nav-btn">›</button>
+      </div>
+      <div class="cal-weekdays" id="calWeekdays"></div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div id="calDetail" class="cal-detail" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="targets-header">
+      <p class="section-title" style="margin:0;">Daily targets</p>
+      <button class="edit-link" id="editTargetsBtn">Edit</button>
+    </div>
+    <div id="targetsDisplay" class="targets-display"></div>
+    <div id="targetsEdit" style="display:none;"></div>
+  </div>
+
+  <footer>Data is stored only in this browser, on this device.</footer>
+</div>
+
+<script>
+const EXERCISES = [
+  { key: "pushups", label: "Push-ups", color: "var(--pushups)", hex: "#e0654d", emoji: "💪" },
+  { key: "situps", label: "Sit-ups", color: "var(--situps)", hex: "#4d8fe0", emoji: "🔥" },
+  { key: "squats", label: "Squats", color: "var(--squats)", hex: "#4dbf7a", emoji: "🦵" },
+];
+const DEFAULT_TARGETS = { pushups: 20, situps: 20, squats: 20 };
+const STORAGE_KEY_LOGS = "workout_tracker_logs_v1";
+const STORAGE_KEY_TARGETS = "workout_tracker_targets_v1";
+
+function todayKey(d = new Date()) { return d.toISOString().slice(0,10); }
+function last7Days() {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(todayKey(d));
+  }
+  return days;
+}
+
+let targets = JSON.parse(localStorage.getItem(STORAGE_KEY_TARGETS) || "null") || {...DEFAULT_TARGETS};
+let logs = JSON.parse(localStorage.getItem(STORAGE_KEY_LOGS) || "null") || {};
+
+function saveTargets() { localStorage.setItem(STORAGE_KEY_TARGETS, JSON.stringify(targets)); }
+function saveLogs() { localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs)); }
+
+function getTodayLog() {
+  const today = todayKey();
+  if (!logs[today]) logs[today] = { pushups: 0, situps: 0, squats: 0, rest: false };
+  return logs[today];
+}
+
+function isComplete(dayKey) {
+  const log = logs[dayKey];
+  if (!log) return false;
+  if (log.rest) return true;
+  return EXERCISES.every(ex => (log[ex.key] || 0) >= targets[ex.key]);
+}
+
+function computeStreak() {
+  let count = 0;
+  let d = new Date();
+  const today = todayKey();
+  if (!isComplete(today)) d.setDate(d.getDate() - 1);
+  while (true) {
+    const key = todayKey(d);
+    if (isComplete(key)) { count++; d.setDate(d.getDate() - 1); }
+    else break;
+  }
+  return count;
+}
+
+function updateCount(exerciseKey, delta) {
+  const log = getTodayLog();
+  log[exerciseKey] = Math.max(0, (log[exerciseKey] || 0) + delta);
+  saveLogs();
+  render();
+}
+
+function toggleRest() {
+  const log = getTodayLog();
+  log.rest = !log.rest;
+  saveLogs();
+  render();
+}
+
+let editingTargets = false;
+let draftTargets = {...targets};
+
+function saveTargetsFromDraft() {
+  const cleaned = {};
+  EXERCISES.forEach(ex => {
+    const v = parseInt(draftTargets[ex.key], 10);
+    cleaned[ex.key] = (isNaN(v) || v < 1) ? 1 : v;
+  });
+  targets = cleaned;
+  saveTargets();
+  editingTargets = false;
+  render();
+}
+
+function render() {
+  const today = todayKey();
+  const todayLog = getTodayLog();
+  const isRest = !!todayLog.rest;
+
+  document.getElementById("dateLabel").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+
+  const streak = computeStreak();
+  const streakTag = document.getElementById("streakTag");
+  if (streak > 0) {
+    streakTag.style.display = "inline";
+    streakTag.textContent = "🔥 " + streak + " day" + (streak !== 1 ? "s" : "");
+  } else {
+    streakTag.style.display = "none";
+  }
+
+  const restBtn = document.getElementById("restBtn");
+  restBtn.textContent = isRest ? "😌 Resting today — tap to undo" : "🌙 Mark today as a rest day";
+  restBtn.classList.toggle("active", isRest);
+
+  document.getElementById("restCard").style.display = isRest ? "block" : "none";
+  document.getElementById("cardsWrap").style.display = isRest ? "none" : "flex";
+
+  // Exercise cards
+  const cardsWrap = document.getElementById("cardsWrap");
+  cardsWrap.innerHTML = "";
+  EXERCISES.forEach(ex => {
+    const count = todayLog[ex.key] || 0;
+    const target = targets[ex.key];
+    const pct = Math.min(100, Math.round((count / target) * 100));
+    const done = count >= target;
+
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="card-title"><span>${ex.emoji}</span><span>${ex.label}</span></div>
+        <span class="card-count ${done ? 'done' : ''}" style="${done ? 'color:' + ex.hex : ''}">${count} / ${target}</span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${pct}%; background:${ex.hex};"></div></div>
+      <div class="btn-row">
+        <button class="btn-minus" data-ex="${ex.key}" data-delta="-5">−5</button>
+        <button class="btn-minus" data-ex="${ex.key}" data-delta="-1">−1</button>
+        <button class="btn-plus" style="background:${ex.hex}" data-ex="${ex.key}" data-delta="1">+1</button>
+        <button class="btn-plus" style="background:${ex.hex}" data-ex="${ex.key}" data-delta="5">+5</button>
+      </div>
+    `;
+    cardsWrap.appendChild(card);
+  });
+  cardsWrap.querySelectorAll("button[data-ex]").forEach(btn => {
+    btn.addEventListener("click", () => updateCount(btn.dataset.ex, parseInt(btn.dataset.delta, 10)));
+  });
+
+  // Week row
+  const weekRow = document.getElementById("weekRow");
+  weekRow.innerHTML = "";
+  last7Days().forEach(dayKey => {
+    const log = logs[dayKey];
+    const isRestDay = log && log.rest;
+    const allDone = !isRestDay && log && EXERCISES.every(ex => (log[ex.key] || 0) >= targets[ex.key]);
+    const someDone = !isRestDay && log && EXERCISES.some(ex => (log[ex.key] || 0) > 0);
+    const label = new Date(dayKey + "T00:00:00").toLocaleDateString(undefined, { weekday: "narrow" });
+
+    let bg = "var(--stone-100)", color = "var(--stone-500)", symbol = "";
+    if (isRestDay) { bg = "#c7d2fe"; color = "#4338ca"; symbol = "🌙"; }
+    else if (allDone) { bg = "var(--squats)"; color = "white"; symbol = "✓"; }
+    else if (someDone) { bg = "#fde68a"; color = "#78716c"; symbol = "·"; }
+
+    const col = document.createElement("div");
+    col.className = "day-col";
+    col.innerHTML = `
+      <span class="day-label">${label}</span>
+      <div class="day-dot ${dayKey === today ? 'today' : ''}" style="background:${bg}; color:${color};">${symbol}</div>
+    `;
+    weekRow.appendChild(col);
+  });
+
+  // Targets section
+  document.getElementById("targetsDisplay").style.display = editingTargets ? "none" : "flex";
+  document.getElementById("targetsEdit").style.display = editingTargets ? "block" : "none";
+  document.getElementById("editTargetsBtn").style.display = editingTargets ? "none" : "inline";
+
+  if (!editingTargets) {
+    document.getElementById("targetsDisplay").innerHTML = EXERCISES.map(ex =>
+      `<span>${ex.label}: <b>${targets[ex.key]}</b></span>`
+    ).join("");
+  } else {
+    const editWrap = document.getElementById("targetsEdit");
+    editWrap.innerHTML = EXERCISES.map(ex => `
+      <div class="target-edit-row">
+        <span>${ex.label}</span>
+        <input type="number" min="1" value="${draftTargets[ex.key]}" data-ex="${ex.key}" />
+      </div>
+    `).join("") + `
+      <div class="target-btn-row">
+        <button class="btn-cancel" id="cancelTargetsBtn">Cancel</button>
+        <button class="btn-save" id="saveTargetsBtn">Save</button>
+      </div>
+    `;
+    editWrap.querySelectorAll("input[data-ex]").forEach(input => {
+      input.addEventListener("input", () => { draftTargets[input.dataset.ex] = input.value; });
+    });
+    document.getElementById("cancelTargetsBtn").addEventListener("click", () => { editingTargets = false; render(); });
+    document.getElementById("saveTargetsBtn").addEventListener("click", saveTargetsFromDraft);
+  }
+}
+
+document.getElementById("restBtn").addEventListener("click", toggleRest);
+document.getElementById("editTargetsBtn").addEventListener("click", () => {
+  draftTargets = {...targets};
+  editingTargets = true;
+  render();
+});
+
+// ---- Calendar / History ----
+let calendarOpen = false;
+let calViewDate = new Date(); // month currently displayed
+let selectedDay = null;
+
+document.getElementById("toggleCalendarBtn").addEventListener("click", () => {
+  calendarOpen = !calendarOpen;
+  document.getElementById("calendarWrap").style.display = calendarOpen ? "block" : "none";
+  document.getElementById("toggleCalendarBtn").textContent = calendarOpen ? "Hide" : "Show";
+  if (calendarOpen) renderCalendar();
+});
+
+document.getElementById("calPrevBtn").addEventListener("click", () => {
+  calViewDate.setMonth(calViewDate.getMonth() - 1);
+  renderCalendar();
+});
+document.getElementById("calNextBtn").addEventListener("click", () => {
+  calViewDate.setMonth(calViewDate.getMonth() + 1);
+  renderCalendar();
+});
+
+function renderCalendar() {
+  const weekdaysEl = document.getElementById("calWeekdays");
+  if (!weekdaysEl.children.length) {
+    ["S","M","T","W","T","F","S"].forEach(d => {
+      const s = document.createElement("span");
+      s.textContent = d;
+      weekdaysEl.appendChild(s);
+    });
+  }
+
+  document.getElementById("calMonthLabel").textContent = calViewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+  const grid = document.getElementById("calGrid");
+  grid.innerHTML = "";
+
+  const year = calViewDate.getFullYear();
+  const month = calViewDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const startOffset = firstDay.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayStr = todayKey();
+
+  for (let i = 0; i < startOffset; i++) {
+    const empty = document.createElement("div");
+    empty.className = "cal-cell empty";
+    grid.appendChild(empty);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const cellDate = new Date(year, month, d);
+    const key = todayKey(cellDate);
+    const isFuture = key > todayStr;
+    const log = logs[key];
+
+    const cell = document.createElement("button");
+    cell.className = "cal-cell";
+    if (key === todayStr) cell.classList.add("today");
+    if (key === selectedDay) cell.classList.add("selected");
+    if (isFuture) cell.classList.add("future");
+
+    let bg = "var(--stone-50)";
+    if (!isFuture && log) {
+      if (log.rest) bg = "#c7d2fe";
+      else if (isComplete(key)) bg = "#bbf0cf";
+      else if (EXERCISES.some(ex => (log[ex.key] || 0) > 0)) bg = "#fde68a";
+    }
+    cell.style.background = bg;
+    cell.textContent = d;
+
+    if (!isFuture) {
+      cell.addEventListener("click", () => {
+        selectedDay = key;
+        renderCalendar();
+        renderDayDetail(key);
+      });
+    }
+    grid.appendChild(cell);
+  }
+
+  if (selectedDay) renderDayDetail(selectedDay);
+}
+
+function renderDayDetail(key) {
+  const detail = document.getElementById("calDetail");
+  detail.style.display = "block";
+  const log = logs[key];
+  const label = new Date(key + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+
+  if (!log) {
+    detail.innerHTML = `<h4>${label}</h4><p class="cal-detail-empty">No activity logged.</p>`;
+    return;
+  }
+  if (log.rest) {
+    detail.innerHTML = `<h4>${label}</h4><p class="cal-detail-rest">🌙 Rest day</p>`;
+    return;
+  }
+  detail.innerHTML = `<h4>${label}</h4>` + EXERCISES.map(ex => {
+    const count = log[ex.key] || 0;
+    const target = targets[ex.key];
+    const done = count >= target;
+    return `<div class="cal-detail-row"><span>${ex.emoji} ${ex.label}</span><span style="${done ? 'color:' + ex.hex + ';font-weight:600;' : ''}">${count} / ${target}</span></div>`;
+  }).join("");
+}
+
+render();
+</script>
+</body>
+</html>
