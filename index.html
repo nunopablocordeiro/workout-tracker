@@ -30,8 +30,9 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: var(--stone-50);
     color: var(--stone-800);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  .wrap { max-width: 420px; margin: 0 auto; padding: 20px; }
+  .wrap { max-width: 420px; margin: 0 auto; padding: 20px; padding-top: calc(env(safe-area-inset-top, 0px) + 20px); }
   .header-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
   h1 { font-size: 24px; font-weight: 700; margin: 0; }
   .streak { font-size: 14px; font-weight: 600; color: #ea580c; }
@@ -236,11 +237,11 @@
     <input type="file" id="lbRestoreInput" accept=".json,application/json" style="display:none;" />
     <div id="lbRestoreMsg" class="lb-status" style="margin-top:8px;"></div>
     <p class="lb-help">
-      Once a day, whenever you log something, a file named <b>daily-reps-backup.json</b> is
-      saved to your device's Files app → Downloads — a real file, independent of Safari's
-      storage. Note: iOS sometimes adds "(1)", "(2)" etc. instead of truly overwriting if it
-      thinks it's a new download, so it's worth glancing at Downloads occasionally and
-      deleting older duplicates, keeping the most recent one.
+      Tap "Back up now" anytime to save a file named <b>daily-reps-backup.json</b> to your
+      device's Files app → Downloads — a real file, independent of Safari's storage. Nothing
+      downloads automatically. Note: iOS sometimes adds "(1)", "(2)" etc. instead of truly
+      overwriting if it thinks it's a new download, so it's worth glancing at Downloads
+      occasionally and keeping the most recent one.
     </p>
   </div>
 
@@ -318,8 +319,8 @@ function migrateLogs(raw) {
 let targets = migrateTargets(JSON.parse(localStorage.getItem(STORAGE_KEY_TARGETS) || "null"));
 let logs = migrateLogs(JSON.parse(localStorage.getItem(STORAGE_KEY_LOGS) || "null"));
 
-function saveTargets() { localStorage.setItem(STORAGE_KEY_TARGETS, JSON.stringify(targets)); queueGhSync(); maybeAutoBackup(); }
-function saveLogs() { localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs)); queueGhSync(); maybeAutoBackup(); }
+function saveTargets() { localStorage.setItem(STORAGE_KEY_TARGETS, JSON.stringify(targets)); queueGhSync(); }
+function saveLogs() { localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs)); queueGhSync(); }
 
 function getTodayLog() {
   const today = todayKey();
@@ -915,14 +916,6 @@ function downloadBackupFile() {
   const now = new Date();
   localStorage.setItem(LB_LAST_KEY, now.toISOString());
   renderLbStatus();
-}
-
-function maybeAutoBackup() {
-  const last = localStorage.getItem(LB_LAST_KEY);
-  const lastDay = last ? last.slice(0, 10) : null;
-  if (lastDay !== todayKey()) {
-    downloadBackupFile();
-  }
 }
 
 function renderLbStatus() {
