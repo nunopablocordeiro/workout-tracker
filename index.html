@@ -227,7 +227,7 @@
 
   <div class="section-card">
     <div class="targets-header">
-      <p class="section-title" style="margin:0;">📥 Automatic Local Backup</p>
+      <p class="section-title" style="margin:0;">📥 Local Backup</p>
     </div>
     <div id="lbStatus" class="lb-status">Not backed up yet</div>
     <div class="lb-btn-row">
@@ -902,7 +902,7 @@ document.getElementById("ghDisconnectBtn")?.addEventListener("click", () => {
   renderGhUI();
 });
 
-// ---- Automatic Local Backup (real file on device, not browser storage) ----
+// ---- Local Backup (real file on device, not browser storage) ----
 const LB_LAST_KEY = "workout_tracker_last_local_backup_v1";
 
 function downloadBackupFile() {
