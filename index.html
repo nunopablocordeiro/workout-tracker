@@ -224,7 +224,10 @@
     <div id="lbStatus" class="lb-status">Not backed up yet</div>
     <div class="lb-btn-row">
       <button id="lbBackupNowBtn">Back up now</button>
+      <button id="lbRestoreBtn">Restore from file</button>
     </div>
+    <input type="file" id="lbRestoreInput" accept=".json,application/json" style="display:none;" />
+    <div id="lbRestoreMsg" class="lb-status" style="margin-top:8px;"></div>
     <p class="lb-help">
       Once a day, whenever you log something, a file named <b>daily-reps-backup.json</b> is
       saved to your device's Files app → Downloads — a real file, independent of Safari's
@@ -669,6 +672,27 @@ function ghApiUrl() {
   return `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}/contents/${ghConfig.path}`;
 }
 
+async function ghCheckRepoAccess() {
+  const res = await fetch(`https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}`, {
+    headers: {
+      "Authorization": `Bearer ${ghConfig.token}`,
+      "Accept": "application/vnd.github+json",
+    },
+  });
+  if (res.status === 404) {
+    throw new Error(
+      `Repo "${ghConfig.owner}/${ghConfig.repo}" wasn't found with this token. Check: the repo exists, the username/repo spelling is exact, and the token was scoped to this repo.`
+    );
+  }
+  if (res.status === 401 || res.status === 403) {
+    throw new Error("Token was rejected — it may be invalid, expired, or missing the Contents: Read and write permission.");
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`GitHub check failed (${res.status}): ${body.slice(0, 120)}`);
+  }
+}
+
 async function ghFetchRemote() {
   const res = await fetch(ghApiUrl(), {
     headers: {
@@ -741,6 +765,7 @@ async function ghInitialLoad() {
   setGhStatus("Connecting…", "syncing");
   renderGhUI();
   try {
+    await ghCheckRepoAccess();
     const remote = await ghFetchRemote();
     if (remote) {
       targets = migrateTargets(remote.targets);
@@ -883,6 +908,60 @@ function renderLbStatus() {
 }
 
 document.getElementById("lbBackupNowBtn").addEventListener("click", downloadBackupFile);
+
+document.getElementById("lbRestoreBtn").addEventListener("click", () => {
+  document.getElementById("lbRestoreInput").click();
+});
+
+document.getElementById("lbRestoreInput").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const msgEl = document.getElementById("lbRestoreMsg");
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(reader.result);
+    } catch (err) {
+      msgEl.textContent = "That file doesn't look like a valid backup.";
+      msgEl.className = "lb-status";
+      return;
+    }
+    if (!parsed || (!parsed.targets && !parsed.logs)) {
+      msgEl.textContent = "That file doesn't look like a valid backup.";
+      msgEl.className = "lb-status";
+      return;
+    }
+
+    const whenTaken = parsed.exportedAt
+      ? new Date(parsed.exportedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+      : "an unknown time";
+    const ok = confirm(
+      `Restore this backup (taken ${whenTaken})?\n\nThis will replace your current data on this device.`
+    );
+    if (!ok) {
+      e.target.value = "";
+      return;
+    }
+
+    targets = migrateTargets(parsed.targets);
+    logs = migrateLogs(parsed.logs);
+    EXERCISES.forEach(ex => { pendingSetValue[ex.key] = targets[ex.key].reps; });
+    saveTargets();
+    saveLogs();
+    render();
+
+    msgEl.textContent = "Restored backup from " + whenTaken + ".";
+    msgEl.className = "lb-status ok";
+    e.target.value = "";
+  };
+  reader.onerror = () => {
+    msgEl.textContent = "Couldn't read that file.";
+    msgEl.className = "lb-status";
+  };
+  reader.readAsText(file);
+});
 
 renderLbStatus();
 ghInitialLoad();
