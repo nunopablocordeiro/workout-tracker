@@ -138,6 +138,28 @@
   .cal-detail-rest { font-size: 13px; color: #4338ca; font-weight: 500; }
   .cal-detail-empty { font-size: 13px; color: var(--stone-400); }
 
+  .gh-status { font-size: 12px; color: var(--stone-400); margin-bottom: 10px; }
+  .gh-status.ok { color: var(--squats); }
+  .gh-status.err { color: #dc2626; }
+  .gh-status.syncing { color: var(--stone-400); }
+  .gh-field { margin-bottom: 8px; }
+  .gh-field label { display: block; font-size: 11px; color: var(--stone-400); margin-bottom: 3px; }
+  .gh-field input {
+    width: 100%; padding: 8px; border-radius: 8px; border: 1px solid var(--stone-200); font-size: 13px;
+  }
+  .gh-btn-row { display: flex; gap: 8px; margin-top: 10px; }
+  .gh-btn-row button { flex: 1; padding: 9px 0; border-radius: 8px; border: none; font-weight: 500; font-size: 13px; cursor: pointer; }
+  .gh-connect { background: var(--stone-800); color: white; }
+  .gh-disconnect { background: var(--stone-100); color: var(--stone-500); }
+  .gh-help { font-size: 11px; color: var(--stone-400); margin-top: 8px; line-height: 1.5; }
+  .gh-help a { color: var(--stone-500); }
+
+  .lb-status { font-size: 12px; color: var(--stone-400); margin-bottom: 10px; }
+  .lb-status.ok { color: var(--squats); }
+  .lb-btn-row { display: flex; gap: 8px; }
+  .lb-btn-row button { flex: 1; padding: 9px 0; border-radius: 8px; border: none; font-weight: 500; font-size: 13px; cursor: pointer; background: var(--stone-100); color: var(--stone-500); }
+  .lb-help { font-size: 11px; color: var(--stone-400); margin-top: 8px; line-height: 1.5; }
+
   footer { text-align: center; font-size: 11px; color: var(--stone-300); margin-top: 8px; }
 </style>
 </head>
@@ -180,6 +202,36 @@
       <div class="cal-grid" id="calGrid"></div>
       <div id="calDetail" class="cal-detail" style="display:none;"></div>
     </div>
+  </div>
+
+  <div class="section-card">
+    <div class="targets-header">
+      <p class="section-title" style="margin:0;">☁️ Cloud Backup (GitHub)</p>
+    </div>
+    <div id="ghStatus" class="gh-status">Not connected</div>
+    <div id="ghSetupForm"></div>
+    <div id="ghConnectedControls" style="display:none;">
+      <button class="edit-link" id="ghSyncNowBtn">Sync now</button>
+      &nbsp;·&nbsp;
+      <button class="edit-link" id="ghDisconnectBtn">Disconnect</button>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="targets-header">
+      <p class="section-title" style="margin:0;">📥 Automatic Local Backup</p>
+    </div>
+    <div id="lbStatus" class="lb-status">Not backed up yet</div>
+    <div class="lb-btn-row">
+      <button id="lbBackupNowBtn">Back up now</button>
+    </div>
+    <p class="lb-help">
+      Once a day, whenever you log something, a file named <b>daily-reps-backup.json</b> is
+      saved to your device's Files app → Downloads — a real file, independent of Safari's
+      storage. Note: iOS sometimes adds "(1)", "(2)" etc. instead of truly overwriting if it
+      thinks it's a new download, so it's worth glancing at Downloads occasionally and
+      deleting older duplicates, keeping the most recent one.
+    </p>
   </div>
 
   <div class="section-card">
@@ -256,8 +308,8 @@ function migrateLogs(raw) {
 let targets = migrateTargets(JSON.parse(localStorage.getItem(STORAGE_KEY_TARGETS) || "null"));
 let logs = migrateLogs(JSON.parse(localStorage.getItem(STORAGE_KEY_LOGS) || "null"));
 
-function saveTargets() { localStorage.setItem(STORAGE_KEY_TARGETS, JSON.stringify(targets)); }
-function saveLogs() { localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs)); }
+function saveTargets() { localStorage.setItem(STORAGE_KEY_TARGETS, JSON.stringify(targets)); queueGhSync(); maybeAutoBackup(); }
+function saveLogs() { localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs)); queueGhSync(); maybeAutoBackup(); }
 
 function getTodayLog() {
   const today = todayKey();
@@ -587,6 +639,253 @@ function renderDayDetail(key) {
   }).join("");
 }
 
+// ---- Cloud Backup (GitHub) ----
+const GH_CONFIG_KEY = "workout_tracker_gh_config_v1";
+let ghConfig = JSON.parse(localStorage.getItem(GH_CONFIG_KEY) || "null"); // {owner, repo, path, token, sha}
+let ghSyncTimer = null;
+let ghStatusText = "Not connected";
+let ghStatusClass = "";
+
+function saveGhConfig() { localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(ghConfig)); }
+
+function setGhStatus(text, cls) {
+  ghStatusText = text;
+  ghStatusClass = cls || "";
+  const el = document.getElementById("ghStatus");
+  if (el) {
+    el.textContent = text;
+    el.className = "gh-status" + (cls ? " " + cls : "");
+  }
+}
+
+function b64EncodeUnicode(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+function b64DecodeUnicode(str) {
+  return decodeURIComponent(escape(atob(str.replace(/\n/g, ""))));
+}
+
+function ghApiUrl() {
+  return `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}/contents/${ghConfig.path}`;
+}
+
+async function ghFetchRemote() {
+  const res = await fetch(ghApiUrl(), {
+    headers: {
+      "Authorization": `Bearer ${ghConfig.token}`,
+      "Accept": "application/vnd.github+json",
+    },
+  });
+  if (res.status === 404) return null; // file doesn't exist yet
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`GitHub GET failed (${res.status}): ${body.slice(0, 120)}`);
+  }
+  const data = await res.json();
+  ghConfig.sha = data.sha;
+  const decoded = b64DecodeUnicode(data.content);
+  return JSON.parse(decoded);
+}
+
+async function ghPushRemote() {
+  const payload = { targets, logs, updatedAt: new Date().toISOString() };
+  const body = {
+    message: "Update workout data",
+    content: b64EncodeUnicode(JSON.stringify(payload, null, 2)),
+  };
+  if (ghConfig.sha) body.sha = ghConfig.sha;
+
+  const res = await fetch(ghApiUrl(), {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${ghConfig.token}`,
+      "Accept": "application/vnd.github+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new Error(`GitHub PUT failed (${res.status}): ${errBody.slice(0, 150)}`);
+  }
+  const data = await res.json();
+  ghConfig.sha = data.content.sha;
+  saveGhConfig();
+}
+
+function ghConfigured() {
+  return ghConfig && ghConfig.owner && ghConfig.repo && ghConfig.path && ghConfig.token;
+}
+
+function queueGhSync() {
+  if (!ghConfigured()) return;
+  clearTimeout(ghSyncTimer);
+  setGhStatus("Syncing…", "syncing");
+  ghSyncTimer = setTimeout(async () => {
+    try {
+      await ghPushRemote();
+      const now = new Date();
+      setGhStatus("Synced at " + now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }), "ok");
+    } catch (e) {
+      console.error(e);
+      setGhStatus("Sync failed — " + e.message, "err");
+    }
+  }, 1200);
+}
+
+async function ghInitialLoad() {
+  if (!ghConfigured()) {
+    renderGhUI();
+    return;
+  }
+  setGhStatus("Connecting…", "syncing");
+  renderGhUI();
+  try {
+    const remote = await ghFetchRemote();
+    if (remote) {
+      targets = migrateTargets(remote.targets);
+      logs = migrateLogs(remote.logs);
+      localStorage.setItem(STORAGE_KEY_TARGETS, JSON.stringify(targets));
+      localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs));
+      EXERCISES.forEach(ex => { pendingSetValue[ex.key] = targets[ex.key].reps; });
+      setGhStatus("Synced (loaded from GitHub)", "ok");
+    } else {
+      // no remote file yet — push current local data to create it
+      await ghPushRemote();
+      setGhStatus("Synced (created file on GitHub)", "ok");
+    }
+  } catch (e) {
+    console.error(e);
+    setGhStatus("Couldn't reach GitHub — using local data. " + e.message, "err");
+  }
+  render();
+}
+
+function renderGhUI() {
+  const statusEl = document.getElementById("ghStatus");
+  if (statusEl) {
+    statusEl.textContent = ghStatusText;
+    statusEl.className = "gh-status" + (ghStatusClass ? " " + ghStatusClass : "");
+  }
+
+  const formEl = document.getElementById("ghSetupForm");
+  const controlsEl = document.getElementById("ghConnectedControls");
+
+  if (ghConfigured()) {
+    formEl.style.display = "none";
+    controlsEl.style.display = "block";
+    return;
+  }
+
+  controlsEl.style.display = "none";
+  formEl.style.display = "block";
+  formEl.innerHTML = `
+    <div class="gh-field">
+      <label>GitHub username</label>
+      <input type="text" id="ghOwnerInput" placeholder="e.g. nunosilva" autocapitalize="none" autocorrect="off" />
+    </div>
+    <div class="gh-field">
+      <label>Private repo name</label>
+      <input type="text" id="ghRepoInput" placeholder="e.g. workout-data" autocapitalize="none" autocorrect="off" />
+    </div>
+    <div class="gh-field">
+      <label>File path</label>
+      <input type="text" id="ghPathInput" value="workout-data.json" autocapitalize="none" autocorrect="off" />
+    </div>
+    <div class="gh-field">
+      <label>Personal access token</label>
+      <input type="password" id="ghTokenInput" placeholder="github_pat_..." autocapitalize="none" autocorrect="off" />
+    </div>
+    <div class="gh-btn-row">
+      <button class="gh-connect" id="ghConnectBtn">Connect</button>
+    </div>
+    <p class="gh-help">
+      1. Create a private repo on GitHub (e.g. "workout-data").<br>
+      2. Go to <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>.<br>
+      3. Under "Repository access," choose only that repo.<br>
+      4. Under "Permissions → Repository permissions," set <b>Contents: Read and write</b>.<br>
+      5. Generate, copy the token, and paste it above.
+    </p>
+  `;
+
+  document.getElementById("ghConnectBtn").addEventListener("click", async () => {
+    const owner = document.getElementById("ghOwnerInput").value.trim();
+    const repo = document.getElementById("ghRepoInput").value.trim();
+    const path = document.getElementById("ghPathInput").value.trim() || "workout-data.json";
+    const token = document.getElementById("ghTokenInput").value.trim();
+    if (!owner || !repo || !token) {
+      setGhStatus("Please fill in username, repo, and token.", "err");
+      renderGhUI();
+      return;
+    }
+    ghConfig = { owner, repo, path, token, sha: null };
+    saveGhConfig();
+    await ghInitialLoad();
+  });
+}
+
+document.getElementById("ghSyncNowBtn")?.addEventListener("click", async () => {
+  setGhStatus("Syncing…", "syncing");
+  try {
+    await ghPushRemote();
+    setGhStatus("Synced at " + new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }), "ok");
+  } catch (e) {
+    setGhStatus("Sync failed — " + e.message, "err");
+  }
+});
+document.getElementById("ghDisconnectBtn")?.addEventListener("click", () => {
+  ghConfig = null;
+  localStorage.removeItem(GH_CONFIG_KEY);
+  setGhStatus("Not connected", "");
+  renderGhUI();
+});
+
+// ---- Automatic Local Backup (real file on device, not browser storage) ----
+const LB_LAST_KEY = "workout_tracker_last_local_backup_v1";
+
+function downloadBackupFile() {
+  const payload = { targets, logs, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "daily-reps-backup.json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+  const now = new Date();
+  localStorage.setItem(LB_LAST_KEY, now.toISOString());
+  renderLbStatus();
+}
+
+function maybeAutoBackup() {
+  const last = localStorage.getItem(LB_LAST_KEY);
+  const lastDay = last ? last.slice(0, 10) : null;
+  if (lastDay !== todayKey()) {
+    downloadBackupFile();
+  }
+}
+
+function renderLbStatus() {
+  const el = document.getElementById("lbStatus");
+  if (!el) return;
+  const last = localStorage.getItem(LB_LAST_KEY);
+  if (!last) {
+    el.textContent = "Not backed up yet";
+    el.className = "lb-status";
+  } else {
+    const d = new Date(last);
+    el.textContent = "Last local backup: " + d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " at " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    el.className = "lb-status ok";
+  }
+}
+
+document.getElementById("lbBackupNowBtn").addEventListener("click", downloadBackupFile);
+
+renderLbStatus();
+ghInitialLoad();
 render();
 </script>
 </body>
